@@ -6,7 +6,7 @@
 
 **FOLDERS**
 
-**data**
+**/data**
 
 All the data used for the pipeline
 
