@@ -7,6 +7,7 @@
 **FOLDERS**
 
 **data**
+
 All the data used for the pipeline
 
 *DCCV_AVQ_PERSONE_07062022160135090.csv* - ISTAT data: used to simulate a realistic ingestion of mobile data about physical activity of people
