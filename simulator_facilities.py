@@ -1,8 +1,12 @@
+import json
+from matplotlib.font_manager import json_dump
 import psycopg2
 from config import config
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
+import concurrent.futures
+import json 
 
 
 def get_percents(counts):
@@ -69,7 +73,7 @@ def get_curr_pop(typology, counter, population):
     return curr_pop
 
 
-def get_facilities():
+def get_facilities_data():
     try:
         params = config()
         
@@ -101,7 +105,10 @@ def get_facilities():
             conn.close()
     
     facilities = pd.DataFrame(facilities, columns=["code", "id", "typology"])
+    return facilities, municipalities
 
+
+def get_daily_access_to_facilities(facilities, municipalities):
     new_fac = []
     for istat, pop in tqdm(municipalities):
         tmp_pop = float(pop)
@@ -132,9 +139,43 @@ def get_facilities():
         
         for facility in munic_facilities.itertuples():
             curr_pop = get_curr_pop(facility.typology, facilities_count, pop_for_typology)
-            new_fac.append((facility.code, facility.id, facility.typology, curr_pop))
+            new_access = {"code": facility.code,
+                          "id": facility.id,
+                          "typology": facility.typology,
+                          "accesses": curr_pop}
+            new_fac.append(new_access)
 
-    return facilities
+    return new_fac
 
-tmp = get_facilities()
-print(tmp.shape)
+
+def send_access(fac_info):
+    #TODO: send to kafka
+    access, timestamp = fac_info
+    json_to_be = dict()
+    json_to_be["timestamp"] = timestamp
+    json_to_be["city_code"] = access["code"]
+    json_to_be["id"] = access["id"]
+    json_to_be["typology"] = access["typology"]
+    json_to_be["accesses"] = access["accesses"]
+    json_to_send = json.dumps(json_to_be)
+    if json_to_send is None:
+        raise Exception
+    print(json_to_send)
+
+
+def main():
+    facilities, municipalities = get_facilities_data()
+    timestamp_range = pd.date_range(start="2017-01-01 00:00:00", end="2022-12-31 00:00:00")
+    timestamp_range = [x.timestamp() for x in timestamp_range]
+    
+    for timestamp in timestamp_range:
+        daily_access_to_facilities = get_daily_access_to_facilities(facilities, municipalities)
+        
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            results = list(pool.map(send_access, 
+                                    zip(daily_access_to_facilities,
+                                        [timestamp for _ in range(len(daily_access_to_facilities))])))
+            print(results)
+
+if __name__ == '__main__':
+    main()
