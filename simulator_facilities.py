@@ -1,12 +1,12 @@
-import json
-from matplotlib.font_manager import json_dump
-import psycopg2
-from config import config
-import pandas as pd
-from tqdm import tqdm
-import numpy as np
 import concurrent.futures
-import json 
+import json
+from confluent_kafka import Producer, KafkaError
+import numpy as np
+import pandas as pd
+import psycopg2
+from tqdm import tqdm
+import sys
+from config import config
 
 
 def get_percents(counts):
@@ -148,8 +148,27 @@ def get_daily_access_to_facilities(facilities, municipalities):
     return new_fac
 
 
+def delivery_callback(err, msg):
+        if err:
+            sys.stderr.write('%% Message failed delivery: %s\n' % err)
+        else:
+            sys.stderr.write('%% Message delivered to %s [%d]\n' %
+                             (msg.topic(), msg.partition()))
+
+
 def send_access(fac_info):
-    #TODO: send to kafka
+    kafka_params = {# Required connection configs for Kafka producer, consumer, and admin
+        "bootstrap.servers":"**********",
+        "security.protocol":"SASL_SSL",
+        "sasl.mechanisms":"PLAIN",
+        "sasl.username":"**********",
+        "sasl.password":"**********",
+
+        # Best practice for higher availability in librdkafka clients prior to 1.7
+        "session.timeout.ms":45000}
+    p = Producer(**kafka_params)
+    topic = "facilities"
+    
     access, timestamp = fac_info
     json_to_be = dict()
     json_to_be["timestamp"] = timestamp
@@ -158,9 +177,16 @@ def send_access(fac_info):
     json_to_be["typology"] = access["typology"]
     json_to_be["accesses"] = access["accesses"]
     json_to_send = json.dumps(json_to_be)
-    if json_to_send is None:
-        raise Exception
-    print(json_to_send)
+    try:
+        try:
+            p.produce(topic, json_to_send.encode('utf-8'), callback=delivery_callback)
+        except:
+            pass
+    except BufferError as e:
+        sys.stderr.write('%% Local producer queue is full (%d messages awaiting delivery): try again\n' %
+                            len(p))
+    p.poll(0)
+    p.flush()
 
 
 def main():
@@ -172,10 +198,9 @@ def main():
         daily_access_to_facilities = get_daily_access_to_facilities(facilities, municipalities)
         
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            results = list(pool.map(send_access, 
-                                    zip(daily_access_to_facilities,
-                                        [timestamp for _ in range(len(daily_access_to_facilities))])))
-            print(results)
+            pool.map(send_access,zip(daily_access_to_facilities,
+                                    [timestamp for _ in range(len(daily_access_to_facilities))]))
+            
 
 if __name__ == '__main__':
     main()
