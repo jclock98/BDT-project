@@ -114,15 +114,7 @@ def delivery_callback(err, msg):
 
 
 def send_activity(act_info):
-    kafka_params = {# Required connection configs for Kafka producer, consumer, and admin
-        "bootstrap.servers":"**********",
-        "security.protocol":"SASL_SSL",
-        "sasl.mechanisms":"PLAIN",
-        "sasl.username":"**********",
-        "sasl.password":"**********",
-
-        # Best practice for higher availability in librdkafka clients prior to 1.7
-        "session.timeout.ms":45000}
+    kafka_params = config(section="kafka")
     p = Producer(**kafka_params)
     topic = "facilities"
     
@@ -142,6 +134,7 @@ def send_activity(act_info):
                             len(p))
     p.poll(0)
     p.flush()
+    p.close()
 
 
 def send_activity_concurr(act_info):
