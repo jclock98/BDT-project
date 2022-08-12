@@ -11,6 +11,7 @@ from confluent_kafka import Producer, KafkaError
 
 import sys
 from config import config
+import time
 
 
 def get_activities():
@@ -23,6 +24,7 @@ def get_activities():
 
         sql = """SELECT istat, 
                 ROUND((population*sporty_pop/2)), 
+                m.region,
                 daily_steps, 
                 steps_stdev, 
                 daily_pushups, 
@@ -46,6 +48,7 @@ def get_activities():
             
     columns = ["code", 
                "pop",
+               "region",
                "daily_steps", 
                "steps_std", 
                "daily_pushups", 
@@ -72,7 +75,6 @@ def get_daily_activities(activities):
     for x in tqdm(activities.itertuples()):
         pop = float(x.pop) 
         pop -= np.random.normal(0, 0.05)*pop
-        pop_list = [x.code for _ in range(round(pop))]
         
         new_steps = np.random.normal(float(x.daily_steps), float(x.steps_std), size=round(pop))
         new_steps = [int(num) for num in np.around(new_steps)]
@@ -80,6 +82,7 @@ def get_daily_activities(activities):
         tmp_dict = dict()
         tmp_dict["code"] = x.code
         tmp_dict["type"] = "steps"
+        tmp_dict["region"] = x.region
         tmp_dict["activity"] = [{"device": device, "quantity": steps} for device, steps in zip(device_names, new_steps)]
         total_daily_steps.append(tmp_dict)
         
@@ -90,6 +93,7 @@ def get_daily_activities(activities):
         tmp_dict = dict()
         tmp_dict["code"] = x.code
         tmp_dict["type"] = "squats"
+        tmp_dict["region"] = x.region
         tmp_dict["activity"] = [{"device": device, "quantity": squats} for device, squats in zip(device_names, new_squats)]
         total_daily_squats.append(tmp_dict)
         
@@ -99,6 +103,7 @@ def get_daily_activities(activities):
         tmp_dict = dict()
         tmp_dict["code"] = x.code
         tmp_dict["type"] = "pushups"
+        tmp_dict["region"] = x.region
         tmp_dict["activity"] = [{"device": device, "quantity": pushups} for device, pushups in zip(device_names, new_pushups)]
         total_daily_pushups.append(tmp_dict)
     
@@ -116,11 +121,12 @@ def delivery_callback(err, msg):
 def send_activity(act_info):
     kafka_params = config(section="kafka")
     p = Producer(**kafka_params)
-    topic = "facilities"
+    topic = "activities"
     
     json_to_be = dict()
     json_to_be["timestamp"] = act_info["timestamp"]
     json_to_be["city_code"] = act_info["code"]
+    json_to_be["region"] = act_info["region"]
     json_to_be["activity"] = act_info["activity"]
     json_to_be["type"] = act_info["type"]
     json_to_send = json.dumps(json_to_be)
@@ -134,7 +140,7 @@ def send_activity(act_info):
                             len(p))
     p.poll(0)
     p.flush()
-    p.close()
+    time.sleep(2)
 
 
 def send_activity_concurr(act_info):
@@ -150,7 +156,7 @@ def get_timestamped_list(curr_list, timestamp):
 
 def main():
     activities = get_activities()
-    timestamp_range = pd.date_range(start="2017-01-01 00:00:00", end="2022-12-31 00:00:00")
+    timestamp_range = pd.date_range(start="2022-08-01 00:00:00", end="2022-09-01 00:00:00")
     timestamp_range = [x.timestamp() for x in timestamp_range]
     
     for timestamp in timestamp_range:

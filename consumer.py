@@ -13,14 +13,28 @@ MIN_COMMIT_COUNT = 2
 
 def msg_process(msg, mongo_session):
     json_to_insert = json.loads(msg.value().decode("utf-8"))
-    new_id = "{}_{}_{}".format(str(json_to_insert["code"]),
-                                str(json_to_insert["timestamp"]),
-                                str(msg.topic()))
+    if msg.topic() == "facilities":
+        new_id = "{}_{}_{}_{}".format(str(json_to_insert["city_code"]),
+                                    str(json_to_insert["id"]),
+                                    str(json_to_insert["timestamp"]),
+                                    str(msg.topic()))
+    elif msg.topic() == "activities":
+        new_id = "{}_{}_{}".format(str(json_to_insert["city_code"]),
+                                    str(json_to_insert["timestamp"]),
+                                    str(msg.topic()))
     json_to_insert["_id"] = new_id
     db = mongo_session["Cluster0"]
     collection = db[msg.topic()]
-    result = collection.insert_one(json_to_insert)
-
+    try:
+       result = collection.insert_one(json_to_insert)
+    except:
+        mongo_filter = {"_id":new_id}
+        if msg.topic() == "facilities":
+            new_value = {"$set":{"accesses":json_to_insert["accesses"]}}
+        elif msg.topic() == "activities":
+            new_value = {"$set":{"activity":json_to_insert["activity"]}}
+        result = collection.update_one(mongo_filter, new_value)
+    
 
 def consume_loop(consumer, topics, mongo_session):
     try:
@@ -43,6 +57,8 @@ def consume_loop(consumer, topics, mongo_session):
                 msg_count += 1
                 if msg_count % MIN_COMMIT_COUNT == 0:
                     consumer.commit(asynchronous=True)
+    except Exception as e:
+        print(e)
     finally:
         # Close down consumer to commit final offsets.
         print("Close consumer!")
@@ -68,4 +84,6 @@ def read_kafka(topic):
 def main():
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         executor.map(read_kafka, ["activities", "facilities"])
-    
+
+if __name__ == '__main__':
+    main()

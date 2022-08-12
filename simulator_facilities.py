@@ -7,6 +7,8 @@ import psycopg2
 from tqdm import tqdm
 import sys
 from config import config
+import certifi
+import time
 
 
 def get_percents(counts):
@@ -89,7 +91,7 @@ def get_facilities_data():
         facilities = cur.fetchall()
         print("Got facilities!")
         
-        sql = """SELECT istat, (population*sporty_pop/2)
+        sql = """SELECT istat, (population*sporty_pop/2), region
                  FROM municipalities"""
         cur.execute(sql)
         print("Got municipalities!")
@@ -110,8 +112,8 @@ def get_facilities_data():
 
 def get_daily_access_to_facilities(facilities, municipalities):
     new_fac = []
-    for istat, pop in tqdm(municipalities):
-        tmp_pop = float(pop)
+    for istat, pop, region in tqdm(municipalities):
+        tmp_pop = np.sqrt(float(pop))
         tmp_pop -= np.random.normal(0, 0.05)*tmp_pop
 
         munic_facilities = facilities[facilities["code"] == istat]
@@ -142,6 +144,7 @@ def get_daily_access_to_facilities(facilities, municipalities):
             new_access = {"code": facility.code,
                           "id": facility.id,
                           "typology": facility.typology,
+                          "region": region,
                           "accesses": curr_pop}
             new_fac.append(new_access)
 
@@ -158,6 +161,7 @@ def delivery_callback(err, msg):
 
 def send_access(fac_info):
     kafka_params = config(section="kafka")
+    kafka_params.update({'ssl.ca.location':certifi.where()})
     p = Producer(**kafka_params)
     topic = "facilities"
     
@@ -167,6 +171,7 @@ def send_access(fac_info):
     json_to_be["city_code"] = access["code"]
     json_to_be["id"] = access["id"]
     json_to_be["typology"] = access["typology"]
+    json_to_be["region"] = access["region"]
     json_to_be["accesses"] = access["accesses"]
     json_to_send = json.dumps(json_to_be)
     try:
@@ -179,12 +184,12 @@ def send_access(fac_info):
                             len(p))
     p.poll(0)
     p.flush()
-    p.close()
+    time.sleep(2)
 
 
 def main():
     facilities, municipalities = get_facilities_data()
-    timestamp_range = pd.date_range(start="2017-01-01 00:00:00", end="2022-12-31 00:00:00")
+    timestamp_range = pd.date_range(start="2022-08-01 00:00:00", end="2022-09-01 00:00:00")
     timestamp_range = [x.timestamp() for x in timestamp_range]
     
     for timestamp in timestamp_range:
