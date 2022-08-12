@@ -1,6 +1,15 @@
 import psycopg2 as psy
 import pandas as pd
 from config import config
+import pyspark
+from pyspark import SparkContext
+from pyspark.sql import SparkSession
+from pyspark.sql import SQLContext
+
+from pyspark.sql.types import StructType,StructField, StringType, IntegerType, FloatType
+import pymongo
+from pyspark.sql.functions import col, lit
+import json
 
 def get_facilities_per_pop():
     try:
@@ -44,13 +53,9 @@ def get_trends():
     sport_interest["norm_interest"] = round((sport_interest["interest"]-sport_interest["interest"].min())/(sport_interest["interest"].max()-sport_interest["interest"].min()),2)
     return sport_interest
 
-def get_activity_info():
-    import pyspark
-    from pyspark import SparkContext
-    from pyspark.sql import SparkSession
-    from pyspark.sql import SQLContext
-
-    from pyspark.sql.types import StructType,StructField, StringType, IntegerType, FloatType
+def get_activity_info(spark):
+    mongo_params = config(section="mongo")
+    mongo_client = pymongo.MongoClient("mongodb+srv://{}:{}@·{}/?retryWrites=true&w=majority".format(mongo_params["user"], mongo_params["password"], mongo_params["host"]))
 
     steps = mongo_client.Cluster0.activities.find({"type":"steps"})
     pushups = mongo_client.Cluster0.activities.find({"type":"pushups"})
@@ -75,7 +80,7 @@ def get_activity_info():
                                 StructField("region", StringType(), True),\
                                 StructField("timestamp", FloatType(), True),\
                                 StructField("typology", FloatType(), True)])
-    facilities = spark.createDataFrame(df_steps,schema=activitySchema)
+    facilities = spark.createDataFrame(df_steps,schema=facilitySchema)
     norm_fac = facilities.groupBy("region").sum("accesses").withColumnRenamed("sum(accesses)", "total_accesses").orderBy("region")
 
     new_steps = [] 
@@ -121,10 +126,7 @@ def get_activity_info():
                         StructField("device", StringType(), True),\
                         StructField("quantity", IntegerType(), True)])
 
-    spark = SparkSession.builder \
-        .master("local[1]") \
-        .appName("BDT") \
-        .getOrCreate()
+    
     #Create DataFrame by changing schema
     spark.conf.set("spark.sql.execution.arrow.pyspark.enabled","true")
     spark_steps = spark.createDataFrame(df_steps,schema=activitySchema)
@@ -147,15 +149,20 @@ def get_activity_info():
     scaled_data = scaler_model.transform(norm_df)
     columns_to_drop = [col+"_vec" for col in columns_to_scale]
     scaled_data = scaled_data.drop(columns_to_drop)
-    return scaled_data
+    return scaled_data, timestamp
 
-def write_on_mongo(sport_index):
+def write_on_mongo(sport_index, timestamp):
     mongo_params = config(section="mongo")
     mongo_client = pymongo.MongoClient("mongodb+srv://{}:{}@·{}/?retryWrites=true&w=majority".format(mongo_params["user"], 
                                                                                                      mongo_params["password"], 
                                                                                                      mongo_params["host"]))
     db = mongo_client["Cluster0"]
     collection = db["results"]
+    sport_index_json = dict()
+    sport_index_json["timestamp"] = timestamp
+    tmp_list = [{x["region"]:x["mean"]} for x in sport_index]
+    sport_index_json["result"] = tmp_list
+    sport_index_json = json.dumps(sport_index_json).encode('utf8')
     result = collection.insert_one(sport_index_json)
     
     
@@ -163,6 +170,21 @@ def main():
     fac_per_pop = get_facilities_per_pop()
     trends = get_trends()
     sport_index_features = fac_per_pop.join(trends, rsuffix="_trends").drop("region_trends", axis=1)
+    spark = SparkSession.builder \
+        .master("local[1]") \
+        .appName("BDT") \
+        .getOrCreate()
+    tmpSchema = StructType([StructField("region", StringType(), True),\
+                                StructField("ratio", FloatType(), True),\
+                                StructField("norm_ratio", FloatType(), True),\
+                                StructField("interest", IntegerType(), True),\
+                                StructField("norm_interest", FloatType(), True)])
+    sport_index_df = spark.createDataFrame(sport_index_features, tmpSchema)
+    activities_score, timestamp = get_activity_info(spark)
+    sport_index_df = sport_index_df.join(activities_score, sport_index_df.region == activities_score.region)
+    df1=sport_index_df.select(col("region"), ((col("norm_ratio") + col("norm_interest")+col("norm_total_accesses")+col("norm_total_steps")+col("norm_total_squats")+col("norm_total_pushups")) / lit(6)).alias("mean"))
+    write_on_mongo(df1, timestamp)
+    
     
 if __name__ == '__main__':
     main()
