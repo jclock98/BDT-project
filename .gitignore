@@ -1,2 +1,7 @@
 cache/
 .ipynb_checkpoints/
+database.ini
+*.pyc
+Untitled.ipynb
+.gitignore
+confluent-*/
