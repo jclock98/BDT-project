@@ -30,3 +30,11 @@ The code written to build this data architecture is accessible on a GitHub repos
 All the data used for the pipeline
 
 *DCCV_AVQ_PERSONE_07062022160135090.csv* - ISTAT data: used to simulate a realistic ingestion of mobile data about physical activity of people
+
+*italy_provincies.json* - Data about the italian provinces (initials, province name, population, number of municipalities, region ID)
+
+*italy_geo.json* - Geodata about Italian municipalities (ISTAT code, city name, longitude, latitude)
+
+*italy_cities.json* - Data about Italian municipalities (ISTAT code, city name, region, province, prefix, fiscal code, population)
+
+
