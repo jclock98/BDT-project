@@ -12,8 +12,8 @@ Data about sports activity have often been collected through survey methods, whi
 The report is on the file **BDT_Report.pdf**
  
 
-# IMPLEMENTATION
-The code written to build this data architecture is accessible on a GitHub repository. It is composed of a set of scripts that must be executed in separated shells, in this order:
+# IMPLEMENTATION - Execution of the pipeline
+To run the pipeline, there is a set of scripts that must be executed in separated shells, in this order:
 
 1) The simulators (*simulator_activity.py*, *simulator_facilities.py*), respectively used to simulate the intensity of physical activity and the accesses to the gyms
 
