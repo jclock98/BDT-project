@@ -1,5 +1,12 @@
 # A big data system for the classification of physical activity level in the Italian regions
 
+Luigi Arminio - 215248
+
+Jacopo Clocchiatti - 229701
+
+Course: Big Data Technologies - UNITN (MSc in Data Science)
+
+
 Data about sports activity have often been collected through survey methods, which, however, have some critical issues (e.g., they are subject to social desirability bias, and they do not allow daily monitoring of physical activity in a given territory). In this sense, data registered in mobile applications, as well as OpenStreetMap data and Google searches data, if integrated with data collected in more traditional ways, could represent a way to have more detailed information about people's physical activity level. For this reason, in this work, we projected a big data system to classify the physical activity level in the different Italian regions based on multiple data sources. The output of the system is a daily updating DataBase containing several indicators, and a composite statistical index, to monitor the physical activity level in the Italian regions.
  
 
